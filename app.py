@@ -194,7 +194,6 @@ else:
 
             if frame_count % frame_interval == 0:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                # 라플라시안 분산을 안전하게 계산 (OpenCV 표준 방식)
                 laplacian = cv2.Laplacian(gray, cv2.CV_64F)
                 blur_score = laplacian.var()
                 blur_scores.append(blur_score)
@@ -221,3 +220,59 @@ else:
     def ai_organize_videos_with_gemini(valid_videos, api_key):
         """Gemini 모델을 이용한 영상 내용 요약 및 편집 순서 정렬"""
         try:
+            client = genai.Client(api_key=api_key)
+            
+            contents = [
+                "당신은 전문 영상 편집 디렉터입니다. 사용자가 업로드한 여러 개의 영상 클립 대표 이미지들을 분석하여, 각 영상의 내용을 한 줄로 요약하고 전체 영상이 가장 자연스럽게 이어지도록 최적의 편집 순서를 매겨주세요."
+            ]
+
+            for idx, vid in enumerate(valid_videos):
+                contents.append(f"\n[영상 {idx+1}: {vid['file_name']} (길이: {vid['duration']:.1f}초)]")
+                for frame in vid['frames']:
+                    success, buffer = cv2.imencode(".jpg", frame)
+                    if success:
+                        contents.append(
+                            types.Part.from_bytes(
+                                data=buffer.tobytes(),
+                                mime_type="image/jpeg",
+                            )
+                        )
+
+            contents.append("\n위 영상들을 분석해서 1) 각 영상의 내용 요약과 2) 가장 추천하는 편집 순서(번호와 요약 이유)를 보기 쉽게 정리해 줘.")
+
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=contents
+            )
+            return response.text
+        except Exception as e:
+            return f"❌ Gemini AI 분석 중 오류가 발생했습니다: {e}"
+
+    # --- 분석 및 정렬 실행 버튼 (예상 시간 안내 및 프로그레스 바 포함) ---
+    if st.session_state.stored_files:
+        st.divider()
+        total_count = len(st.session_state.stored_files)
+        estimated_seconds = total_count * 2
+        st.info(f"⏱️ 등록된 영상 {total_count}개 분석 예상 소요 시간: 약 {estimated_seconds}초 내외")
+
+        if st.button("🚀 비디오랜딩 분석 및 정렬 시작", type="primary"):
+            if not st.session_state.gemini_api_key:
+                st.error("⚠️ 좌측 사이드바에 Gemini API Key를 먼저 입력해주세요!")
+            else:
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                status_text.text("🔄 영상을 분석할 준비를 하고 있습니다...")
+                progress_bar.progress(10)
+                
+                valid_clips = []
+                
+                st.subheader("📊 1단계: 개별 영상 품질 및 블러 분석 결과")
+                
+                for idx, uploaded_file in enumerate(st.session_state.stored_files):
+                    current_progress = 10 + int((idx / total_count) * 50)
+                    progress_bar.progress(current_progress)
+                    status_text.text(f"🔍 분석 중 ({idx+1}/{total_count}): {uploaded_file.name}")
+                    
+                    tfile = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1])
+                    tfile.write
