@@ -120,7 +120,6 @@ else:
     st.sidebar.divider()
     st.sidebar.header("⚙️ 설정")
     
-    # 사이드바 API Key 입력 및 저장 기능 추가
     api_key_input = st.sidebar.text_input(
         "Gemini API Key 입력", 
         type="password", 
@@ -139,11 +138,11 @@ else:
         st.sidebar.caption("🔒 API 키가 활성화되어 있습니다.")
 
     st.title("🎬 비디오랜딩 (VideoLanding)")
-    st.markdown(f"환영합니다, **{user_name}**님! 영상 클립을 업로드하고 리스트 관리와 AI 분석을 이용해 보세요.")
+    st.markdown(f"환영합니다, **{user_name}**님! 영상 클립을 추가하고 리스트 관리와 AI 분석을 이용해 보세요.")
 
-    # 파일 업로드 컴포넌트
+    # 파일 업로드 컴포넌트 (누적 추가 지원)
     uploaded_files = st.file_uploader(
-        "정리할 영상 파일을 여러 개 선택하세요 (mp4, mov, avi)", 
+        "정리할 영상 파일을 추가하거나 선택하세요 (mp4, mov, avi)", 
         type=["mp4", "mov", "avi"], 
         accept_multiple_files=True
     )
@@ -183,7 +182,7 @@ else:
             if selected_file_name:
                 st.video(file_dict[selected_file_name])
 
-    def analyze_and_filter_video(video_path, blur_threshold=100.0, frame_interval=30):
+    def analyze_and_filter_video(video_path, blur_threshold=80.0, frame_interval=30):
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             return {"error": "영상을 열 수 없습니다."}
