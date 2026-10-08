@@ -1,4 +1,5 @@
 import os
+import json
 import cv2
 import numpy as np
 import tempfile
@@ -33,34 +34,60 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 회원 정보 및 로그인 상태 세션 초기화 ---
-if "users_db" not in st.session_state:
-    # 기본 테스트 계정 사전 등록 (이메일: password)
-    st.session_state.users_db = {"ses15977@gmail.com": "1234"}
+# --- JSON 파일 기반 DB 관리 함수 ---
+DB_FILE = "users.json"
 
+def load_users_db():
+    if os.path.exists(DB_FILE):
+        try:
+            with open(DB_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {"ses15977@gmail.com": "1234"}
+    else:
+        # 파일이 없으면 기본 계정으로 초기 파일 생성
+        initial_db = {"ses15977@gmail.com": "1234"}
+        save_users_db(initial_db)
+        return initial_db
+
+def save_users_db(db):
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(db, f, ensure_ascii=False, indent=4)
+
+# --- 세션 상태 초기화 ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user_email" not in st.session_state:
     st.session_state.user_email = ""
+if "saved_email" not in st.session_state:
+    st.session_state.saved_email = ""
 
 # --- 로그인 / 회원가입 화면 구현 ---
 if not st.session_state.logged_in:
     st.title("🔐 비디오랜딩 서비스")
     
-    # 탭을 나누어 로그인과 회원가입을 편하게 오갈 수 있도록 구성
     tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
     
     with tab1:
         st.markdown("등록된 이메일과 비밀번호로 로그인하세요.")
         with st.form("login_form"):
-            login_email = st.text_input("이메일 주소", key="login_email")
-            login_pw = st.text_input("비밀번호", type="password", key="login_pw")
+            login_email = st.text_input("이메일 주소", value=st.session_state.saved_email, key="login_email_input")
+            login_pw = st.text_input("비밀번호", type="password", key="login_pw_input")
+            remember_email = st.checkbox("이메일 주소 기억하기", value=bool(st.session_state.saved_email))
+            
             login_btn = st.form_submit_button("로그인", type="primary")
             
             if login_btn:
-                if login_email in st.session_state.users_db and st.session_state.users_db[login_email] == login_pw:
+                users_db = load_users_db()
+                if login_email in users_db and users_db[login_email] == login_pw:
                     st.session_state.logged_in = True
                     st.session_state.user_email = login_email
+                    
+                    if remember_email:
+                        st.session_state.saved_email = login_email
+                    else:
+                        st.session_state.saved_email = ""
+                        
                     st.success("로그인 성공!")
                     st.rerun()
                 else:
@@ -69,19 +96,21 @@ if not st.session_state.logged_in:
     with tab2:
         st.markdown("새로운 계정을 등록하여 나만의 공간을 만드세요.")
         with st.form("signup_form"):
-            signup_email = st.text_input("사용할 이메일 주소", key="signup_email")
-            signup_pw = st.text_input("사용할 비밀번호", type="password", key="signup_pw")
+            signup_email = st.text_input("사용할 이메일 주소", key="signup_email_input")
+            signup_pw = st.text_input("사용할 비밀번호", type="password", key="signup_pw_input")
             signup_btn = st.form_submit_button("회원가입 완료", type="primary")
             
             if signup_btn:
+                users_db = load_users_db()
                 if not signup_email or "@" not in signup_email:
                     st.error("⚠️ 올바른 이메일 주소를 입력해주세요.")
                 elif not signup_pw:
                     st.error("⚠️ 비밀번호를 입력해주세요.")
-                elif signup_email in st.session_state.users_db:
+                elif signup_email in users_db:
                     st.warning("⚠️ 이미 가입된 이메일입니다. 로그인해 주세요.")
                 else:
-                    st.session_state.users_db[signup_email] = signup_pw
+                    users_db[signup_email] = signup_pw
+                    save_users_db(users_db)  # 파일에 영구 저장
                     st.success("🎉 회원가입이 완료되었습니다! '로그인' 탭에서 로그인해 주세요.")
 
 else:
