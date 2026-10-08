@@ -34,7 +34,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 세션 상태 및 쿼리 파라미터(새로고침 유지) 초기화 ---
+# --- 세션 상태 및 쿼리 파라미터 초기화 ---
 if "users_db" not in st.session_state:
     st.session_state.users_db = {"ses15977@gmail.com": "1234"}
 
@@ -44,7 +44,6 @@ if "saved_email" not in st.session_state:
 if "stored_files" not in st.session_state:
     st.session_state.stored_files = []
 
-# API 키 세션 저장 기본값 설정
 if "gemini_api_key" not in st.session_state:
     st.session_state.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
 
@@ -121,15 +120,23 @@ else:
     st.sidebar.divider()
     st.sidebar.header("⚙️ 설정")
     
-    # 사이드바 API Key 입력 (세션에 보존되어 로그인 중에는 유지됨)
+    # 사이드바 API Key 입력 및 저장 기능 추가
     api_key_input = st.sidebar.text_input(
         "Gemini API Key 입력", 
         type="password", 
         value=st.session_state.gemini_api_key,
         key="api_key_text_input"
     )
-    if api_key_input:
-        st.session_state.gemini_api_key = api_key_input
+    
+    if st.sidebar.button("💾 API 키 저장"):
+        if api_key_input.strip():
+            st.session_state.gemini_api_key = api_key_input.strip()
+            st.sidebar.success("✅ API 키가 안전하게 저장되었습니다!")
+        else:
+            st.sidebar.error("⚠️ 유효한 API 키를 입력해주세요.")
+
+    if st.session_state.gemini_api_key:
+        st.sidebar.caption("🔒 API 키가 활성화되어 있습니다.")
 
     st.title("🎬 비디오랜딩 (VideoLanding)")
     st.markdown(f"환영합니다, **{user_name}**님! 영상 클립을 업로드하고 리스트 관리와 AI 분석을 이용해 보세요.")
@@ -250,7 +257,7 @@ else:
         except Exception as e:
             return f"❌ Gemini AI 분석 중 오류가 발생했습니다: {e}"
 
-    # --- 분석 및 정렬 실행 버튼 (예상 시간 안내 및 프로그레스 바 포함) ---
+    # --- 분석 및 정렬 실행 버튼 ---
     if st.session_state.stored_files:
         st.divider()
         total_count = len(st.session_state.stored_files)
@@ -259,7 +266,7 @@ else:
 
         if st.button("🚀 비디오랜딩 분석 및 정렬 시작", type="primary"):
             if not st.session_state.gemini_api_key:
-                st.error("⚠️ 좌측 사이드바에 Gemini API Key를 먼저 입력해주세요!")
+                st.error("⚠️ 좌측 사이드바에 Gemini API Key를 입력하고 [💾 API 키 저장] 버튼을 눌러주세요!")
             else:
                 progress_bar = st.progress(0)
                 status_text = st.empty()
