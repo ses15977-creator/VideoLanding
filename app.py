@@ -38,9 +38,12 @@ st.markdown("""
 if "users_db" not in st.session_state:
     st.session_state.users_db = {"ses15977@gmail.com": "1234"}
 
-# 영구 저장된 이메일 값을 세션에 관리
 if "saved_email" not in st.session_state:
     st.session_state.saved_email = ""
+
+# 업로드된 파일 리스트를 세션에 영구 보관하여 클릭 시 초기화되는 현상 방지
+if "stored_files" not in st.session_state:
+    st.session_state.stored_files = []
 
 # URL 쿼리 파라미터에서 로그인 상태 확인 (새로고침 대응)
 query_params = st.query_params
@@ -61,8 +64,6 @@ if not st.session_state.logged_in:
     
     with tab1:
         st.markdown("등록된 이메일과 비밀번호로 로그인하세요.")
-        
-        # 폼 대신 일반 입력 컴포넌트를 사용하여 이메일 기억하기 상태와 즉시 연동
         login_email = st.text_input("이메일 주소", value=st.session_state.saved_email, key="login_email_input")
         login_pw = st.text_input("비밀번호", type="password", key="login_pw_input")
         remember_email = st.checkbox("이메일 주소 기억하기", value=bool(st.session_state.saved_email))
@@ -71,11 +72,8 @@ if not st.session_state.logged_in:
             if login_email in st.session_state.users_db and st.session_state.users_db[login_email] == login_pw:
                 st.session_state.logged_in = True
                 st.session_state.user_email = login_email
-                
-                # URL 쿼리 파라미터에 계정 정보를 남겨 새로고침해도 유지되도록 설정
                 st.query_params["logged_in_user"] = login_email
                 
-                # 체크박스 선택 여부에 따라 이메일 저장/초기화
                 if remember_email:
                     st.session_state.saved_email = login_email
                 else:
@@ -112,7 +110,7 @@ else:
     if st.sidebar.button("로그아웃"):
         st.session_state.logged_in = False
         st.session_state.user_email = ""
-        # 로그아웃 시 쿼리 파라미터 제거
+        st.session_state.stored_files = []
         if "logged_in_user" in st.query_params:
             del st.query_params["logged_in_user"]
         st.rerun()
@@ -122,7 +120,7 @@ else:
     api_key_input = st.sidebar.text_input("Gemini API Key 입력", type="password", value=os.environ.get("GEMINI_API_KEY", ""))
 
     st.title("🎬 비디오랜딩 (VideoLanding)")
-    st.markdown(f"환영합니다, **{user_name}**님! 영상 클립을 업로드하고 미리보기와 AI 분석을 이용해 보세요.")
+    st.markdown(f"환영합니다, **{user_name}**님! 영상 클립을 업로드하고 리스트 관리와 AI 분석을 이용해 보세요.")
 
     # 파일 업로드 컴포넌트
     uploaded_files = st.file_uploader(
@@ -131,18 +129,41 @@ else:
         accept_multiple_files=True
     )
 
-    # --- 🎥 업로드된 영상 미리보기 및 재생 섹션 ---
+    # 새로운 파일이 업로드되면 세션 리스트에 안전하게 병합 (중복 방지)
     if uploaded_files:
+        current_file_names = [f.name for f in st.session_state.stored_files]
+        for uf in uploaded_files:
+            if uf.name not in current_file_names:
+                st.session_state.stored_files.append(uf)
+
+    # --- 🎥 업로드된 영상 리스트 관리 및 개별 삭제, 미리보기 섹션 ---
+    if st.session_state.stored_files:
         st.divider()
-        st.subheader("📺 업로드된 영상 미리보기 및 확인")
-        st.markdown("선택하신 영상 중 확인하고 싶은 클립을 선택하여 바로 재생해 볼 수 있습니다.")
+        st.subheader("📁 업로드된 영상 클립 관리")
+        st.markdown("등록된 영상 목록을 확인하고, 불필요한 영상은 삭제하거나 선택하여 미리 재생해 보세요.")
 
-        file_dict = {file.name: file for file in uploaded_files}
-        selected_file_name = st.selectbox("재생할 영상을 선택하세요:", list(file_dict.keys()))
+        # 개별 파일 삭제 인터페이스
+        files_to_keep = []
+        for idx, file_obj in enumerate(st.session_state.stored_files):
+            col_info, col_del = st.columns([4, 1])
+            with col_info:
+                st.text(f"🎬 {file_obj.name}")
+            with col_del:
+                if st.button("삭제", key=f"del_btn_{idx}_{file_obj.name}"):
+                    continue  # 삭제 버튼을 누르면 이 파일은 keep 리스트에서 제외됨
+            files_to_keep.append(file_obj)
+        
+        st.session_state.stored_files = files_to_keep
 
-        if selected_file_name:
-            chosen_file = file_dict[selected_file_name]
-            st.video(chosen_file)
+        # 만약 파일이 남아있다면 미리보기 셀렉트박스 제공
+        if st.session_state.stored_files:
+            st.markdown("---")
+            st.subheader("📺 영상 미리보기 플레이어")
+            file_dict = {file.name: file for file in st.session_state.stored_files}
+            selected_file_name = st.selectbox("재생할 영상을 선택하세요:", list(file_dict.keys()), key="preview_selectbox")
+
+            if selected_file_name:
+                st.video(file_dict[selected_file_name])
 
     def analyze_and_filter_video(video_path, blur_threshold=100.0, frame_interval=30):
         cap = cv2.VideoCapture(video_path)
@@ -217,9 +238,13 @@ else:
         except Exception as e:
             return f"❌ Gemini AI 분석 중 오류가 발생했습니다: {e}"
 
-    # --- 분석 및 정렬 실행 버튼 (프로그레스 바 포함) ---
-    if uploaded_files:
+    # --- 분석 및 정렬 실행 버튼 (예상 시간 안내 및 프로그레스 바 포함) ---
+    if st.session_state.stored_files:
         st.divider()
+        total_count = len(st.session_state.stored_files)
+        estimated_seconds = total_count * 2  # 파일당 약 2초 소요 예상
+        st.info(f"⏱️ 등록된 영상 {total_count개} 분석 예상 소요 시간: 약 {estimated_seconds}초 내외")
+
         if st.button("🚀 비디오랜딩 분석 및 정렬 시작", type="primary"):
             if not api_key_input:
                 st.error("⚠️ 좌측 사이드바에 Gemini API Key를 먼저 입력해주세요!")
@@ -231,14 +256,13 @@ else:
                 progress_bar.progress(10)
                 
                 valid_clips = []
-                total_files = len(uploaded_files)
                 
                 st.subheader("📊 1단계: 개별 영상 품질 및 블러 분석 결과")
                 
-                for idx, uploaded_file in enumerate(uploaded_files):
-                    current_progress = 10 + int((idx / total_files) * 50)
+                for idx, uploaded_file in enumerate(st.session_state.stored_files):
+                    current_progress = 10 + int((idx / total_count) * 50)
                     progress_bar.progress(current_progress)
-                    status_text.text(f"🔍 분석 중 ({idx+1}/{total_files}): {uploaded_file.name}")
+                    status_text.text(f"🔍 분석 중 ({idx+1}/{total_count}): {uploaded_file.name}")
                     
                     tfile = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1])
                     tfile.write(uploaded_file.read())
