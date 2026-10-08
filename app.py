@@ -38,6 +38,10 @@ st.markdown("""
 if "users_db" not in st.session_state:
     st.session_state.users_db = {"ses15977@gmail.com": "1234"}
 
+# 영구 저장된 이메일 값을 세션에 관리
+if "saved_email" not in st.session_state:
+    st.session_state.saved_email = ""
+
 # URL 쿼리 파라미터에서 로그인 상태 확인 (새로고침 대응)
 query_params = st.query_params
 if "logged_in_user" in query_params:
@@ -49,9 +53,6 @@ else:
     if "user_email" not in st.session_state:
         st.session_state.user_email = ""
 
-if "saved_email" not in st.session_state:
-    st.session_state.saved_email = ""
-
 # --- 로그인 / 회원가입 화면 ---
 if not st.session_state.logged_in:
     st.title("🔐 비디오랜딩 서비스")
@@ -60,48 +61,46 @@ if not st.session_state.logged_in:
     
     with tab1:
         st.markdown("등록된 이메일과 비밀번호로 로그인하세요.")
-        with st.form("login_form"):
-            login_email = st.text_input("이메일 주소", value=st.session_state.saved_email, key="login_email_input")
-            login_pw = st.text_input("비밀번호", type="password", key="login_pw_input")
-            remember_email = st.checkbox("이메일 주소 기억하기", value=bool(st.session_state.saved_email))
-            
-            login_btn = st.form_submit_button("로그인", type="primary")
-            
-            if login_btn:
-                if login_email in st.session_state.users_db and st.session_state.users_db[login_email] == login_pw:
-                    st.session_state.logged_in = True
-                    st.session_state.user_email = login_email
-                    
-                    # URL 쿼리 파라미터에 계정 정보를 남겨 새로고침해도 유지되도록 설정
-                    st.query_params["logged_in_user"] = login_email
-                    
-                    if remember_email:
-                        st.session_state.saved_email = login_email
-                    else:
-                        st.session_state.saved_email = ""
-                        
-                    st.success("로그인 성공!")
-                    st.rerun()
+        
+        # 폼 대신 일반 입력 컴포넌트를 사용하여 이메일 기억하기 상태와 즉시 연동
+        login_email = st.text_input("이메일 주소", value=st.session_state.saved_email, key="login_email_input")
+        login_pw = st.text_input("비밀번호", type="password", key="login_pw_input")
+        remember_email = st.checkbox("이메일 주소 기억하기", value=bool(st.session_state.saved_email))
+        
+        if st.button("로그인", type="primary", key="login_submit_btn"):
+            if login_email in st.session_state.users_db and st.session_state.users_db[login_email] == login_pw:
+                st.session_state.logged_in = True
+                st.session_state.user_email = login_email
+                
+                # URL 쿼리 파라미터에 계정 정보를 남겨 새로고침해도 유지되도록 설정
+                st.query_params["logged_in_user"] = login_email
+                
+                # 체크박스 선택 여부에 따라 이메일 저장/초기화
+                if remember_email:
+                    st.session_state.saved_email = login_email
                 else:
-                    st.error("⚠️ 이메일 또는 비밀번호가 일치하지 않습니다.")
+                    st.session_state.saved_email = ""
+                    
+                st.success("로그인 성공!")
+                st.rerun()
+            else:
+                st.error("⚠️ 이메일 또는 비밀번호가 일치하지 않습니다.")
                     
     with tab2:
         st.markdown("새로운 계정을 등록하여 나만의 공간을 만드세요.")
-        with st.form("signup_form"):
-            signup_email = st.text_input("사용할 이메일 주소", key="signup_email_input")
-            signup_pw = st.text_input("사용할 비밀번호", type="password", key="signup_pw_input")
-            signup_btn = st.form_submit_button("회원가입 완료", type="primary")
-            
-            if signup_btn:
-                if not signup_email or "@" not in signup_email:
-                    st.error("⚠️ 올바른 이메일 주소를 입력해주세요.")
-                elif not signup_pw:
-                    st.error("⚠️ 비밀번호를 입력해주세요.")
-                elif signup_email in st.session_state.users_db:
-                    st.warning("⚠️ 이미 가입된 이메일입니다. 로그인해 주세요.")
-                else:
-                    st.session_state.users_db[signup_email] = signup_pw
-                    st.success("🎉 회원가입이 완료되었습니다! '로그인' 탭에서 로그인해 주세요.")
+        signup_email = st.text_input("사용할 이메일 주소", key="signup_email_input")
+        signup_pw = st.text_input("사용할 비밀번호", type="password", key="signup_pw_input")
+        
+        if st.button("회원가입 완료", type="primary", key="signup_submit_btn"):
+            if not signup_email or "@" not in signup_email:
+                st.error("⚠️ 올바른 이메일 주소를 입력해주세요.")
+            elif not signup_pw:
+                st.error("⚠️ 비밀번호를 입력해주세요.")
+            elif signup_email in st.session_state.users_db:
+                st.warning("⚠️ 이미 가입된 이메일입니다. 로그인해 주세요.")
+            else:
+                st.session_state.users_db[signup_email] = signup_pw
+                st.success("🎉 회원가입이 완료되었습니다! '로그인' 탭에서 로그인해 주세요.")
 
 else:
     # --- 로그인 완료 후 메인 서비스 화면 ---
