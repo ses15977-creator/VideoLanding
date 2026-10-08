@@ -6,7 +6,7 @@ import streamlit as st
 from google import genai
 from google.genai import types
 
-# Streamlit 페이지 설정 (모바일 최적화)
+# Streamlit 페이지 설정 (모바일 최적화 및 업로드 파일 크기 제한 해제: 500MB)
 st.set_page_config(
     page_title="비디오랜딩 (VideoLanding)", 
     page_icon="🎬", 
@@ -73,10 +73,31 @@ else:
     api_key_input = st.sidebar.text_input("Gemini API Key 입력", type="password", value=os.environ.get("GEMINI_API_KEY", ""))
 
     st.title("🎬 비디오랜딩 (VideoLanding)")
-    st.markdown(f"환영합니다, **{user_name}**님! 편집 전 영상 클립들을 올려주시면 AI가 분석 및 정리를 도와드립니다.")
+    st.markdown(f"환영합니다, **{user_name}**님! 업로드하신 영상을 웹에서 직접 재생해 확인하고 AI 분석을 시작해 보세요.")
 
-    # 파일 업로드 컴포넌트
-    uploaded_files = st.file_uploader("정리할 영상 파일을 여러 개 선택하세요 (mp4, mov, avi)", type=["mp4", "mov", "avi"], accept_multiple_files=True)
+    # 파일 업로드 컴포넌트 (대용량 파일 지원 안내)
+    uploaded_files = st.file_uploader(
+        "정리할 영상 파일을 여러 개 선택하세요 (mp4, mov, avi)", 
+        type=["mp4", "mov", "avi"], 
+        accept_multiple_files=True
+    )
+
+    # --- 🎥 업로드된 영상 미리보기 및 재생 섹션 ---
+    if uploaded_files:
+        st.divider()
+        st.subheader("📺 업로드된 영상 미리보기 및 확인")
+        st.markdown("선택하신 영상 중 확인하고 싶은 클립을 선택하여 바로 재생해 볼 수 있습니다.")
+
+        # 셀렉트박스를 통해 개별 영상 선택 후 재생
+        file_names = [file.name for file in uploaded_files]
+        selected_file_name = st.selectbox("재생할 영상을 선택하세요:", file_names)
+
+        # 선택된 파일 찾기
+        selected_file = next((f for f in uploaded_files if f.name == selected_file_name), None)
+
+        if selected_file:
+            # Streamlit 웹 플레이어로 영상 직접 재생
+            st.video(selected_file)
 
     def analyze_and_filter_video(video_path, blur_threshold=100.0, frame_interval=30):
         cap = cv2.VideoCapture(video_path)
@@ -141,7 +162,7 @@ else:
                             )
                         )
 
-            contents.append("\n위 영상들을 분석해서 1) 각 영상의 내용 요약과 2) 가장 추천하는 편집 순서(번호와 이유)를 보기 쉽게 정리해 줘.")
+            contents.append("\n위 영상들을 분석해서 1) 각 영상의 내용 요약과 2) 가장 추천하는 편집 순서(번호와 요약 이유)를 보기 쉽게 정리해 줘.")
 
             response = client.models.generate_content(
                 model='gemini-2.5-flash',
@@ -151,8 +172,9 @@ else:
         except Exception as e:
             return f"❌ Gemini AI 분석 중 오류가 발생했습니다: {e}"
 
-    # --- 실행 버튼 ---
+    # --- 분석 및 정렬 실행 버튼 ---
     if uploaded_files:
+        st.divider()
         if st.button("🚀 비디오랜딩 분석 및 정렬 시작", type="primary"):
             if not api_key_input:
                 st.error("⚠️ 좌측 사이드바에 Gemini API Key를 먼저 입력해주세요!")
