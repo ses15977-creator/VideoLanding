@@ -41,7 +41,6 @@ if "users_db" not in st.session_state:
 if "saved_email" not in st.session_state:
     st.session_state.saved_email = ""
 
-# 업로드된 파일 리스트를 세션에 영구 보관하여 클릭 시 초기화되는 현상 방지
 if "stored_files" not in st.session_state:
     st.session_state.stored_files = []
 
@@ -117,12 +116,24 @@ else:
 
     st.sidebar.divider()
     st.sidebar.header("⚙️ 설정")
-    api_key_input = st.sidebar.text_input("Gemini API Key 입력", type="password", value=os.environ.get("GEMINI_API_KEY", ""))
+    
+    # API Key가 세션(st.session_state)에 저장되도록 수정하여 한 번 넣으면 유지되게 함
+    if "gemini_api_key" not in st.session_state:
+        st.session_state.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+
+    api_key_input = st.sidebar.text_input(
+        "Gemini API Key 입력", 
+        type="password", 
+        value=st.session_state.gemini_api_key,
+        key="api_key_text_input"
+    )
+    if api_key_input:
+        st.session_state.gemini_api_key = api_key_input
 
     st.title("🎬 비디오랜딩 (VideoLanding)")
     st.markdown(f"환영합니다, **{user_name}**님! 영상 클립을 업로드하고 리스트 관리와 AI 분석을 이용해 보세요.")
 
-    # 파일 업로드 컴포넌트
+    # 파일 업로드 컴포넌트 (대용량 허용)
     uploaded_files = st.file_uploader(
         "정리할 영상 파일을 여러 개 선택하세요 (mp4, mov, avi)", 
         type=["mp4", "mov", "avi"], 
@@ -149,17 +160,14 @@ else:
             with col_info:
                 st.text(f"🎬 {file_obj.name}")
             with col_del:
-                # 삭제 버튼을 누르지 않은 파일들만 keep 리스트에 남김
                 if st.button("삭제", key=f"del_btn_{idx}_{file_obj.name}"):
                     continue 
             files_to_keep.append(file_obj)
         
-        # 리스트가 변경되었을 경우 업데이트 후 즉시 새로고침
         if len(files_to_keep) != len(st.session_state.stored_files):
             st.session_state.stored_files = files_to_keep
             st.rerun()
 
-        # 만약 파일이 남아있다면 미리보기 셀렉트박스 제공
         if st.session_state.stored_files:
             st.markdown("---")
             st.subheader("📺 영상 미리보기 플레이어")
@@ -246,11 +254,11 @@ else:
     if st.session_state.stored_files:
         st.divider()
         total_count = len(st.session_state.stored_files)
-        estimated_seconds = total_count * 2  # 파일당 약 2초 소요 예상
+        estimated_seconds = total_count * 2
         st.info(f"⏱️ 등록된 영상 {total_count}개 분석 예상 소요 시간: 약 {estimated_seconds}초 내외")
 
         if st.button("🚀 비디오랜딩 분석 및 정렬 시작", type="primary"):
-            if not api_key_input:
+            if not st.session_state.gemini_api_key:
                 st.error("⚠️ 좌측 사이드바에 Gemini API Key를 먼저 입력해주세요!")
             else:
                 progress_bar = st.progress(0)
@@ -292,7 +300,7 @@ else:
                     
                     st.divider()
                     st.subheader("🤖 2단계: Gemini 디렉터의 편집 순서 및 내용 가이드")
-                    ai_result = ai_organize_videos_with_gemini(valid_clips, api_key_input)
+                    ai_result = ai_organize_videos_with_gemini(valid_clips, st.session_state.gemini_api_key)
                     
                     progress_bar.progress(100)
                     status_text.text("✨ 분석이 완료되었습니다!")
