@@ -1,5 +1,4 @@
 import os
-import json
 import cv2
 import numpy as np
 import tempfile
@@ -35,30 +34,21 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- JSON 파일 기반 DB 관리 함수 ---
-DB_FILE = "users.json"
+# --- 세션 상태 및 쿼리 파라미터(새로고침 유지) 초기화 ---
+if "users_db" not in st.session_state:
+    st.session_state.users_db = {"ses15977@gmail.com": "1234"}
 
-def load_users_db():
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {"ses15977@gmail.com": "1234"}
-    else:
-        initial_db = {"ses15977@gmail.com": "1234"}
-        save_users_db(initial_db)
-        return initial_db
+# URL 쿼리 파라미터에서 로그인 상태 확인 (새로고침 대응)
+query_params = st.query_params
+if "logged_in_user" in query_params:
+    st.session_state.logged_in = True
+    st.session_state.user_email = query_params["logged_in_user"]
+else:
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+    if "user_email" not in st.session_state:
+        st.session_state.user_email = ""
 
-def save_users_db(db):
-    with open(DB_FILE, "w", encoding="utf-8") as f:
-        json.dump(db, f, ensure_ascii=False, indent=4)
-
-# --- 세션 상태 초기화 ---
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "user_email" not in st.session_state:
-    st.session_state.user_email = ""
 if "saved_email" not in st.session_state:
     st.session_state.saved_email = ""
 
@@ -78,10 +68,12 @@ if not st.session_state.logged_in:
             login_btn = st.form_submit_button("로그인", type="primary")
             
             if login_btn:
-                users_db = load_users_db()
-                if login_email in users_db and users_db[login_email] == login_pw:
+                if login_email in st.session_state.users_db and st.session_state.users_db[login_email] == login_pw:
                     st.session_state.logged_in = True
                     st.session_state.user_email = login_email
+                    
+                    # URL 쿼리 파라미터에 계정 정보를 남겨 새로고침해도 유지되도록 설정
+                    st.query_params["logged_in_user"] = login_email
                     
                     if remember_email:
                         st.session_state.saved_email = login_email
@@ -101,16 +93,14 @@ if not st.session_state.logged_in:
             signup_btn = st.form_submit_button("회원가입 완료", type="primary")
             
             if signup_btn:
-                users_db = load_users_db()
                 if not signup_email or "@" not in signup_email:
                     st.error("⚠️ 올바른 이메일 주소를 입력해주세요.")
                 elif not signup_pw:
                     st.error("⚠️ 비밀번호를 입력해주세요.")
-                elif signup_email in users_db:
+                elif signup_email in st.session_state.users_db:
                     st.warning("⚠️ 이미 가입된 이메일입니다. 로그인해 주세요.")
                 else:
-                    users_db[signup_email] = signup_pw
-                    save_users_db(users_db)
+                    st.session_state.users_db[signup_email] = signup_pw
                     st.success("🎉 회원가입이 완료되었습니다! '로그인' 탭에서 로그인해 주세요.")
 
 else:
@@ -123,6 +113,9 @@ else:
     if st.sidebar.button("로그아웃"):
         st.session_state.logged_in = False
         st.session_state.user_email = ""
+        # 로그아웃 시 쿼리 파라미터 제거
+        if "logged_in_user" in st.query_params:
+            del st.query_params["logged_in_user"]
         st.rerun()
 
     st.sidebar.divider()
