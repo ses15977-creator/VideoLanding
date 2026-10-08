@@ -6,7 +6,6 @@ import time
 import streamlit as st
 from google import genai
 from google.genai import types
-from streamlit_localstorage import LocalStorage
 
 # Streamlit 페이지 설정
 st.set_page_config(
@@ -35,9 +34,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 로컬 스토리지 객체 초기화
-loc = LocalStorage()
-
 # --- 세션 상태 및 쿼리 파라미터(새로고침 유지) 초기화 ---
 if "users_db" not in st.session_state:
     st.session_state.users_db = {"ses15977@gmail.com": "1234"}
@@ -47,6 +43,10 @@ if "saved_email" not in st.session_state:
 
 if "stored_files" not in st.session_state:
     st.session_state.stored_files = []
+
+# API 키 세션 저장 기본값 설정
+if "gemini_api_key" not in st.session_state:
+    st.session_state.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
 
 # URL 쿼리 파라미터에서 로그인 상태 확인 (새로고침 대응)
 query_params = st.query_params
@@ -121,26 +121,15 @@ else:
     st.sidebar.divider()
     st.sidebar.header("⚙️ 설정")
     
-    # 브라우저 로컬 스토리지에서 저장된 API 키 불러오기
-    saved_api_key_from_storage = loc.getItem("gemini_saved_api_key")
-    
-    if "gemini_api_key" not in st.session_state:
-        if saved_api_key_from_storage:
-            st.session_state.gemini_api_key = saved_api_key_from_storage
-        else:
-            st.session_state.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
-
+    # 사이드바 API Key 입력 (세션에 보존되어 로그인 중에는 유지됨)
     api_key_input = st.sidebar.text_input(
         "Gemini API Key 입력", 
         type="password", 
         value=st.session_state.gemini_api_key,
         key="api_key_text_input"
     )
-    
-    # 입력값이 변경되거나 존재할 경우 브라우저 로컬 스토리지에 영구 저장
-    if api_key_input and api_key_input != st.session_state.gemini_api_key:
+    if api_key_input:
         st.session_state.gemini_api_key = api_key_input
-        loc.setItem("gemini_saved_api_key", api_key_input)
 
     st.title("🎬 비디오랜딩 (VideoLanding)")
     st.markdown(f"환영합니다, **{user_name}**님! 영상 클립을 업로드하고 리스트 관리와 AI 분석을 이용해 보세요.")
