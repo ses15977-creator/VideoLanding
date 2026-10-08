@@ -6,7 +6,7 @@ import streamlit as st
 from google import genai
 from google.genai import types
 
-# Streamlit 페이지 설정 (모바일 최적화 및 업로드 파일 크기 제한 해제: 500MB)
+# Streamlit 페이지 설정 (모바일 최적화)
 st.set_page_config(
     page_title="비디오랜딩 (VideoLanding)", 
     page_icon="🎬", 
@@ -33,28 +33,56 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 세션 상태 초기화 (로그인 관리) ---
+# --- 회원 정보 및 로그인 상태 세션 초기화 ---
+if "users_db" not in st.session_state:
+    # 기본 테스트 계정 사전 등록 (이메일: password)
+    st.session_state.users_db = {"ses15977@gmail.com": "1234"}
+
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user_email" not in st.session_state:
     st.session_state.user_email = ""
 
-# --- 로그인 화면 구현 ---
+# --- 로그인 / 회원가입 화면 구현 ---
 if not st.session_state.logged_in:
-    st.title("🔐 비디오랜딩 로그인")
-    st.markdown("사용자 계정별로 안전하게 영상 편집 공간을 이용하기 위해 이메일을 입력해 주세요.")
+    st.title("🔐 비디오랜딩 서비스")
     
-    with st.form("login_form"):
-        input_email = st.text_input("구글 이메일 주소 (예: user@gmail.com)")
-        login_btn = st.form_submit_button("🚀 로그인 / 시작하기", type="primary")
-        
-        if login_btn:
-            if input_email and "@" in input_email:
-                st.session_state.logged_in = True
-                st.session_state.user_email = input_email
-                st.rerun()
-            else:
-                st.error("⚠️ 올바른 이메일 주소를 입력해주세요.")
+    # 탭을 나누어 로그인과 회원가입을 편하게 오갈 수 있도록 구성
+    tab1, tab2 = st.tabs(["🔑 로그인", "📝 회원가입"])
+    
+    with tab1:
+        st.markdown("등록된 이메일과 비밀번호로 로그인하세요.")
+        with st.form("login_form"):
+            login_email = st.text_input("이메일 주소", key="login_email")
+            login_pw = st.text_input("비밀번호", type="password", key="login_pw")
+            login_btn = st.form_submit_button("로그인", type="primary")
+            
+            if login_btn:
+                if login_email in st.session_state.users_db and st.session_state.users_db[login_email] == login_pw:
+                    st.session_state.logged_in = True
+                    st.session_state.user_email = login_email
+                    st.success("로그인 성공!")
+                    st.rerun()
+                else:
+                    st.error("⚠️ 이메일 또는 비밀번호가 일치하지 않습니다.")
+                    
+    with tab2:
+        st.markdown("새로운 계정을 등록하여 나만의 공간을 만드세요.")
+        with st.form("signup_form"):
+            signup_email = st.text_input("사용할 이메일 주소", key="signup_email")
+            signup_pw = st.text_input("사용할 비밀번호", type="password", key="signup_pw")
+            signup_btn = st.form_submit_button("회원가입 완료", type="primary")
+            
+            if signup_btn:
+                if not signup_email or "@" not in signup_email:
+                    st.error("⚠️ 올바른 이메일 주소를 입력해주세요.")
+                elif not signup_pw:
+                    st.error("⚠️ 비밀번호를 입력해주세요.")
+                elif signup_email in st.session_state.users_db:
+                    st.warning("⚠️ 이미 가입된 이메일입니다. 로그인해 주세요.")
+                else:
+                    st.session_state.users_db[signup_email] = signup_pw
+                    st.success("🎉 회원가입이 완료되었습니다! '로그인' 탭에서 로그인해 주세요.")
 
 else:
     # --- 로그인 완료 후 메인 서비스 화면 ---
@@ -75,7 +103,7 @@ else:
     st.title("🎬 비디오랜딩 (VideoLanding)")
     st.markdown(f"환영합니다, **{user_name}**님! 업로드하신 영상을 웹에서 직접 재생해 확인하고 AI 분석을 시작해 보세요.")
 
-    # 파일 업로드 컴포넌트 (대용량 파일 지원 안내)
+    # 파일 업로드 컴포넌트
     uploaded_files = st.file_uploader(
         "정리할 영상 파일을 여러 개 선택하세요 (mp4, mov, avi)", 
         type=["mp4", "mov", "avi"], 
@@ -88,15 +116,12 @@ else:
         st.subheader("📺 업로드된 영상 미리보기 및 확인")
         st.markdown("선택하신 영상 중 확인하고 싶은 클립을 선택하여 바로 재생해 볼 수 있습니다.")
 
-        # 셀렉트박스를 통해 개별 영상 선택 후 재생
         file_names = [file.name for file in uploaded_files]
         selected_file_name = st.selectbox("재생할 영상을 선택하세요:", file_names)
 
-        # 선택된 파일 찾기
         selected_file = next((f for f in uploaded_files if f.name == selected_file_name), None)
 
         if selected_file:
-            # Streamlit 웹 플레이어로 영상 직접 재생
             st.video(selected_file)
 
     def analyze_and_filter_video(video_path, blur_threshold=100.0, frame_interval=30):
