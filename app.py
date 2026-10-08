@@ -8,14 +8,14 @@ import streamlit as st
 from google import genai
 from google.genai import types
 
-# Streamlit 페이지 설정 (모바일 최적화)
+# Streamlit 페이지 설정
 st.set_page_config(
     page_title="비디오랜딩 (VideoLanding)", 
     page_icon="🎬", 
     layout="centered"
 )
 
-# 모바일 화면을 위한 커스텀 CSS 및 대용량 파일 업로드 스타일 최적화
+# 모바일 화면 최적화 CSS
 st.markdown("""
     <style>
     .stApp {
@@ -62,7 +62,7 @@ if "user_email" not in st.session_state:
 if "saved_email" not in st.session_state:
     st.session_state.saved_email = ""
 
-# --- 로그인 / 회원가입 화면 구현 ---
+# --- 로그인 / 회원가입 화면 ---
 if not st.session_state.logged_in:
     st.title("🔐 비디오랜딩 서비스")
     
@@ -130,22 +130,21 @@ else:
     api_key_input = st.sidebar.text_input("Gemini API Key 입력", type="password", value=os.environ.get("GEMINI_API_KEY", ""))
 
     st.title("🎬 비디오랜딩 (VideoLanding)")
-    st.markdown(f"환영합니다, **{user_name}**님! 대용량 영상 파일도 자유롭게 올리고 미리보기와 AI 분석을 이용해 보세요.")
+    st.markdown(f"환영합니다, **{user_name}**님! 영상 클립을 업로드하고 미리보기와 AI 분석을 이용해 보세요.")
 
-    # 파일 업로드 컴포넌트 (대용량 허용)
+    # 파일 업로드 컴포넌트
     uploaded_files = st.file_uploader(
         "정리할 영상 파일을 여러 개 선택하세요 (mp4, mov, avi)", 
         type=["mp4", "mov", "avi"], 
         accept_multiple_files=True
     )
 
-    # --- 🎥 업로드된 영상 미리보기 및 재생 섹션 (오류 수정 완료) ---
+    # --- 🎥 업로드된 영상 미리보기 및 재생 섹션 ---
     if uploaded_files:
         st.divider()
         st.subheader("📺 업로드된 영상 미리보기 및 확인")
         st.markdown("선택하신 영상 중 확인하고 싶은 클립을 선택하여 바로 재생해 볼 수 있습니다.")
 
-        # 파일 객체 자체를 딕셔너리로 매핑하여 셀렉트박스 오류 방지
         file_dict = {file.name: file for file in uploaded_files}
         selected_file_name = st.selectbox("재생할 영상을 선택하세요:", list(file_dict.keys()))
 
@@ -156,7 +155,7 @@ else:
     def analyze_and_filter_video(video_path, blur_threshold=100.0, frame_interval=30):
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
-            return {"error": f"영상을 열 수 없습니다."}
+            return {"error": "영상을 열 수 없습니다."}
 
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -226,14 +225,13 @@ else:
         except Exception as e:
             return f"❌ Gemini AI 분석 중 오류가 발생했습니다: {e}"
 
-    # --- 분석 및 정렬 실행 버튼 (프로그레스 바 적용) ---
+    # --- 분석 및 정렬 실행 버튼 (프로그레스 바 포함) ---
     if uploaded_files:
         st.divider()
         if st.button("🚀 비디오랜딩 분석 및 정렬 시작", type="primary"):
             if not api_key_input:
                 st.error("⚠️ 좌측 사이드바에 Gemini API Key를 먼저 입력해주세요!")
             else:
-                # 📊 실시간 진행 상황을 보여주는 프로그레스 바 추가
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
@@ -246,7 +244,6 @@ else:
                 st.subheader("📊 1단계: 개별 영상 품질 및 블러 분석 결과")
                 
                 for idx, uploaded_file in enumerate(uploaded_files):
-                    # 진행률 계산 (10% ~ 60% 구간)
                     current_progress = 10 + int((idx / total_files) * 50)
                     progress_bar.progress(current_progress)
                     status_text.text(f"🔍 분석 중 ({idx+1}/{total_files}): {uploaded_file.name}")
@@ -269,7 +266,6 @@ else:
                     
                     os.unlink(tfile.name)
                 
-                # 2단계: Gemini AI 분석 실행 (60% ~ 100% 구간)
                 if valid_clips:
                     progress_bar.progress(70)
                     status_text.text("🤖 Gemini AI 디렉터가 최적의 스토리라인을 구성하는 중입니다...")
