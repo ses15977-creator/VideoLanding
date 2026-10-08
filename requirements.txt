@@ -1,5 +1,4 @@
 streamlit
+google-genai
 opencv-python-headless
 numpy
-google-genai
-streamlit-localstorage
