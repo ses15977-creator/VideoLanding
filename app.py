@@ -5,6 +5,7 @@ import tempfile
 import streamlit as st
 from google import genai
 from google.genai import types
+from streamlit_google_auth import Authenticate
 
 # Streamlit 페이지 설정 (모바일 최적화)
 st.set_page_config(
@@ -33,36 +34,62 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 세션 상태 초기화 (로그인 관리) ---
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "user_email" not in st.session_state:
-    st.session_state.user_email = ""
+# --- 구글 인증(OAuth) 설정 ---
+# ※ 참고: 구글 로그인을 완벽하게 동작시키려면 Google Cloud Console에서 
+# OAuth 클라이언트 ID를 발급받아 st.secrets에 등록하거나 아래에 입력해야 합니다.
+# 테스트를 위해 우선 간편 로그인 모드와 구글 연동 버튼이 함께 작동하도록 구성했습니다.
 
-# --- 로그인 화면 구현 ---
-if not st.session_state.logged_in:
-    st.title("🔐 비디오랜딩 로그인")
-    st.markdown("개인별 작업 공간을 안전하게 이용하기 위해 구글 이메일로 로그인해 주세요.")
+client_id = st.secrets.get("GOOGLE_CLIENT_ID", "YOUR_GOOGLE_CLIENT_ID")
+client_secret = st.secrets.get("GOOGLE_CLIENT_SECRET", "YOUR_GOOGLE_CLIENT_SECRET")
+redirect_uri = st.secrets.get("GOOGLE_REDIRECT_URI", "https://videolanding-gmynymie6l6wakszpc8abt.streamlit.app/")
+
+authenticator = Authenticate(
+    secret_credentials_path=None,
+    client_id=client_id,
+    client_secret=client_secret,
+    redirect_uri=redirect_uri,
+    cookie_cookie_name="video_landing_auth",
+    cookie_key="video_landing_secret",
+    cookie_expiry_days=30,
+)
+
+# 세션 상태 확인
+authenticator.check_authorization()
+
+# --- 로그인 상태 확인 ---
+if not st.session_state.get('connected', False):
+    st.title("🔐 비디오랜딩 간편 로그인")
+    st.markdown("구글 계정으로 안전하게 로그인하여 나만의 영상 편집 공간을 이용하세요.")
     
-    with st.form("login_form"):
-        input_email = st.text_input("구글 이메일 주소 (예: user@gmail.com)")
-        login_btn = st.form_submit_button("🚀 로그인 / 시작하기", type="primary")
-        
-        if login_btn:
-            if input_email and "@" in input_email:
-                st.session_state.logged_in = True
-                st.session_state.user_email = input_email
+    col1, col2 = st.columns(2)
+    with col1:
+        # 공식 구글 로그인 버튼 렌더링
+        authenticator.login()
+    
+    with col2:
+        # 만약 클라우드 키 설정 전이라도 테스트할 수 있는 간편 이메일 로그인 제공
+        with st.form("quick_login_form"):
+            st.markdown("---")
+            st.text("또는 이메일로 바로 시작하기")
+            quick_email = st.text_input("구글 이메일 주소 입력")
+            quick_btn = st.form_submit_button("🚀 간편 로그인", type="primary")
+            if quick_btn and quick_email and "@" in quick_email:
+                st.session_state['connected'] = True
+                st.session_state['user_info'] = {'email': quick_email, 'name': quick_email.split('@')[0]}
                 st.rerun()
-            else:
-                st.error("⚠️ 올바른 이메일 주소를 입력해주세요.")
 
 else:
     # --- 로그인 완료 후 메인 서비스 화면 ---
-    st.sidebar.markdown(f"👤 **접속 계정:**\n`{st.session_state.user_email}`")
+    user_info = st.session_state.get('user_info', {})
+    user_email = user_info.get('email', '사용자')
+    user_name = user_info.get('name', '크리에이터')
+
+    st.sidebar.markdown(f"👤 **접속 계정:**\n`{user_email}`")
     
     if st.sidebar.button("로그아웃"):
-        st.session_state.logged_in = False
-        st.session_state.user_email = ""
+        authenticator.logout()
+        st.session_state['connected'] = False
+        st.session_state['user_info'] = {}
         st.rerun()
 
     st.sidebar.divider()
@@ -70,7 +97,7 @@ else:
     api_key_input = st.sidebar.text_input("Gemini API Key 입력", type="password", value=os.environ.get("GEMINI_API_KEY", ""))
 
     st.title("🎬 비디오랜딩 (VideoLanding)")
-    st.markdown(f"환영합니다, **{st.session_state.user_email}**님! 편집 전 영상 클립들을 올려주시면 AI가 분석 및 정리를 도와드립니다.")
+    st.markdown(f"환영합니다, **{user_name}**님! 편집 전 영상 클립들을 올려주시면 AI가 분석 및 정리를 도와드립니다.")
 
     # 파일 업로드 컴포넌트
     uploaded_files = st.file_uploader("정리할 영상 파일을 여러 개 선택하세요 (mp4, mov, avi)", type=["mp4", "mov", "avi"], accept_multiple_files=True)
@@ -154,7 +181,7 @@ else:
             if not api_key_input:
                 st.error("⚠️ 좌측 사이드바에 Gemini API Key를 먼저 입력해주세요!")
             else:
-                with st.spinner(f"{st.session_state.user_email}님의 영상을 분석하고 Gemini AI가 스토리라인을 짜는 중입니다..."):
+                with st.spinner(f"{user_name}님의 영상을 분석하고 Gemini AI가 스토리라인을 짜는 중입니다..."):
                     valid_clips = []
                     
                     st.subheader("📊 1단계: 개별 영상 품질 및 블러 분석 결과")
