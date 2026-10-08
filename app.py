@@ -149,11 +149,15 @@ else:
             with col_info:
                 st.text(f"🎬 {file_obj.name}")
             with col_del:
+                # 삭제 버튼을 누르지 않은 파일들만 keep 리스트에 남김
                 if st.button("삭제", key=f"del_btn_{idx}_{file_obj.name}"):
-                    continue  # 삭제 버튼을 누르면 이 파일은 keep 리스트에서 제외됨
+                    continue 
             files_to_keep.append(file_obj)
         
-        st.session_state.stored_files = files_to_keep
+        # 리스트가 변경되었을 경우 업데이트 후 즉시 새로고침
+        if len(files_to_keep) != len(st.session_state.stored_files):
+            st.session_state.stored_files = files_to_keep
+            st.rerun()
 
         # 만약 파일이 남아있다면 미리보기 셀렉트박스 제공
         if st.session_state.stored_files:
@@ -243,7 +247,7 @@ else:
         st.divider()
         total_count = len(st.session_state.stored_files)
         estimated_seconds = total_count * 2  # 파일당 약 2초 소요 예상
-        st.info(f"⏱️ 등록된 영상 {total_count개} 분석 예상 소요 시간: 약 {estimated_seconds}초 내외")
+        st.info(f"⏱️ 등록된 영상 {total_count}개 분석 예상 소요 시간: 약 {estimated_seconds}초 내외")
 
         if st.button("🚀 비디오랜딩 분석 및 정렬 시작", type="primary"):
             if not api_key_input:
