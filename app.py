@@ -6,6 +6,7 @@ import time
 import streamlit as st
 from google import genai
 from google.genai import types
+from streamlit_localstorage import LocalStorage
 
 # Streamlit 페이지 설정
 st.set_page_config(
@@ -33,6 +34,9 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
+# 로컬 스토리지 객체 초기화
+loc = LocalStorage()
 
 # --- 세션 상태 및 쿼리 파라미터(새로고침 유지) 초기화 ---
 if "users_db" not in st.session_state:
@@ -117,8 +121,14 @@ else:
     st.sidebar.divider()
     st.sidebar.header("⚙️ 설정")
     
+    # 브라우저 로컬 스토리지에서 저장된 API 키 불러오기
+    saved_api_key_from_storage = loc.getItem("gemini_saved_api_key")
+    
     if "gemini_api_key" not in st.session_state:
-        st.session_state.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+        if saved_api_key_from_storage:
+            st.session_state.gemini_api_key = saved_api_key_from_storage
+        else:
+            st.session_state.gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
 
     api_key_input = st.sidebar.text_input(
         "Gemini API Key 입력", 
@@ -126,8 +136,11 @@ else:
         value=st.session_state.gemini_api_key,
         key="api_key_text_input"
     )
-    if api_key_input:
+    
+    # 입력값이 변경되거나 존재할 경우 브라우저 로컬 스토리지에 영구 저장
+    if api_key_input and api_key_input != st.session_state.gemini_api_key:
         st.session_state.gemini_api_key = api_key_input
+        loc.setItem("gemini_saved_api_key", api_key_input)
 
     st.title("🎬 비디오랜딩 (VideoLanding)")
     st.markdown(f"환영합니다, **{user_name}**님! 영상 클립을 업로드하고 리스트 관리와 AI 분석을 이용해 보세요.")
@@ -275,4 +288,41 @@ else:
                     status_text.text(f"🔍 분석 중 ({idx+1}/{total_count}): {uploaded_file.name}")
                     
                     tfile = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1])
-                    tfile.write
+                    tfile.write(uploaded_file.read())
+                    tfile.close()
+
+                    result = analyze_and_filter_video(tfile.name, blur_threshold=80.0)
+                    
+                    with st.container(border=True):
+                        st.markdown(f"**파일명: {result['file_name']}**")
+                        st.text(f"영상 길이: {result['duration']:.1f}초 | 선명도 점수: {result['avg_blur_score']:.1f}")
+                        
+                        if result.get("is_blurry"):
+                            st.error("🚨 불량 판정 (흔들림/흐림 심함 - 제외 후보)")
+                        else:
+                            st.success("✅ 통과 (편집 후보)")
+                            valid_clips.append(result)
+                    
+                    os.unlink(tfile.name)
+                
+                if valid_clips:
+                    progress_bar.progress(70)
+                    status_text.text("🤖 Gemini AI 디렉터가 최적의 스토리라인을 구성하는 중입니다...")
+                    
+                    st.divider()
+                    st.subheader("🤖 2단계: Gemini 디렉터의 편집 순서 및 내용 가이드")
+                    ai_result = ai_organize_videos_with_gemini(valid_clips, st.session_state.gemini_api_key)
+                    
+                    progress_bar.progress(100)
+                    status_text.text("✨ 분석이 완료되었습니다!")
+                    time.sleep(0.5)
+                    status_text.empty()
+                    progress_bar.empty()
+                    
+                    st.markdown(ai_result)
+                else:
+                    progress_bar.progress(100)
+                    status_text.empty()
+                    st.warning("⚠️ 통과된 유효한 영상이 없습니다. 블러 기준을 조절해 보세요.")
+    else:
+        st.info("💡 위 업로드 버튼을 눌러 편집할 영상들을 선택해 주세요.")
