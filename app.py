@@ -3,6 +3,7 @@ import json
 import cv2
 import numpy as np
 import tempfile
+import time
 import streamlit as st
 from google import genai
 from google.genai import types
@@ -14,7 +15,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# 모바일 화면을 위한 커스텀 CSS
+# 모바일 화면을 위한 커스텀 CSS 및 대용량 파일 업로드 스타일 최적화
 st.markdown("""
     <style>
     .stApp {
@@ -45,7 +46,6 @@ def load_users_db():
         except Exception:
             return {"ses15977@gmail.com": "1234"}
     else:
-        # 파일이 없으면 기본 계정으로 초기 파일 생성
         initial_db = {"ses15977@gmail.com": "1234"}
         save_users_db(initial_db)
         return initial_db
@@ -110,7 +110,7 @@ if not st.session_state.logged_in:
                     st.warning("⚠️ 이미 가입된 이메일입니다. 로그인해 주세요.")
                 else:
                     users_db[signup_email] = signup_pw
-                    save_users_db(users_db)  # 파일에 영구 저장
+                    save_users_db(users_db)
                     st.success("🎉 회원가입이 완료되었습니다! '로그인' 탭에서 로그인해 주세요.")
 
 else:
@@ -130,28 +130,28 @@ else:
     api_key_input = st.sidebar.text_input("Gemini API Key 입력", type="password", value=os.environ.get("GEMINI_API_KEY", ""))
 
     st.title("🎬 비디오랜딩 (VideoLanding)")
-    st.markdown(f"환영합니다, **{user_name}**님! 업로드하신 영상을 웹에서 직접 재생해 확인하고 AI 분석을 시작해 보세요.")
+    st.markdown(f"환영합니다, **{user_name}**님! 대용량 영상 파일도 자유롭게 올리고 미리보기와 AI 분석을 이용해 보세요.")
 
-    # 파일 업로드 컴포넌트
+    # 파일 업로드 컴포넌트 (대용량 허용)
     uploaded_files = st.file_uploader(
         "정리할 영상 파일을 여러 개 선택하세요 (mp4, mov, avi)", 
         type=["mp4", "mov", "avi"], 
         accept_multiple_files=True
     )
 
-    # --- 🎥 업로드된 영상 미리보기 및 재생 섹션 ---
+    # --- 🎥 업로드된 영상 미리보기 및 재생 섹션 (오류 수정 완료) ---
     if uploaded_files:
         st.divider()
         st.subheader("📺 업로드된 영상 미리보기 및 확인")
         st.markdown("선택하신 영상 중 확인하고 싶은 클립을 선택하여 바로 재생해 볼 수 있습니다.")
 
-        file_names = [file.name for file in uploaded_files]
-        selected_file_name = st.selectbox("재생할 영상을 선택하세요:", file_names)
+        # 파일 객체 자체를 딕셔너리로 매핑하여 셀렉트박스 오류 방지
+        file_dict = {file.name: file for file in uploaded_files}
+        selected_file_name = st.selectbox("재생할 영상을 선택하세요:", list(file_dict.keys()))
 
-        selected_file = next((f for f in uploaded_files if f.name == selected_file_name), None)
-
-        if selected_file:
-            st.video(selected_file)
+        if selected_file_name:
+            chosen_file = file_dict[selected_file_name]
+            st.video(chosen_file)
 
     def analyze_and_filter_video(video_path, blur_threshold=100.0, frame_interval=30):
         cap = cv2.VideoCapture(video_path)
@@ -226,44 +226,68 @@ else:
         except Exception as e:
             return f"❌ Gemini AI 분석 중 오류가 발생했습니다: {e}"
 
-    # --- 분석 및 정렬 실행 버튼 ---
+    # --- 분석 및 정렬 실행 버튼 (프로그레스 바 적용) ---
     if uploaded_files:
         st.divider()
         if st.button("🚀 비디오랜딩 분석 및 정렬 시작", type="primary"):
             if not api_key_input:
                 st.error("⚠️ 좌측 사이드바에 Gemini API Key를 먼저 입력해주세요!")
             else:
-                with st.spinner(f"{user_name}님의 영상을 분석하고 Gemini AI가 스토리라인을 짜는 중입니다..."):
-                    valid_clips = []
+                # 📊 실시간 진행 상황을 보여주는 프로그레스 바 추가
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                status_text.text("🔄 영상을 분석할 준비를 하고 있습니다...")
+                progress_bar.progress(10)
+                
+                valid_clips = []
+                total_files = len(uploaded_files)
+                
+                st.subheader("📊 1단계: 개별 영상 품질 및 블러 분석 결과")
+                
+                for idx, uploaded_file in enumerate(uploaded_files):
+                    # 진행률 계산 (10% ~ 60% 구간)
+                    current_progress = 10 + int((idx / total_files) * 50)
+                    progress_bar.progress(current_progress)
+                    status_text.text(f"🔍 분석 중 ({idx+1}/{total_files}): {uploaded_file.name}")
                     
-                    st.subheader("📊 1단계: 개별 영상 품질 및 블러 분석 결과")
-                    
-                    for uploaded_file in uploaded_files:
-                        tfile = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1])
-                        tfile.write(uploaded_file.read())
-                        tfile.close()
+                    tfile = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1])
+                    tfile.write(uploaded_file.read())
+                    tfile.close()
 
-                        result = analyze_and_filter_video(tfile.name, blur_threshold=80.0)
-                        
-                        with st.container(border=True):
-                            st.markdown(f"**파일명: {result['file_name']}**")
-                            st.text(f"영상 길이: {result['duration']:.1f}초 | 선명도 점수: {result['avg_blur_score']:.1f}")
-                            
-                            if result.get("is_blurry"):
-                                st.error("🚨 불량 판정 (흔들림/흐림 심함 - 제외 후보)")
-                            else:
-                                st.success("✅ 통과 (편집 후보)")
-                                valid_clips.append(result)
-                        
-                        os.unlink(tfile.name)
+                    result = analyze_and_filter_video(tfile.name, blur_threshold=80.0)
                     
-                    # 2단계: Gemini AI 분석 실행
-                    if valid_clips:
-                        st.divider()
-                        st.subheader("🤖 2단계: Gemini 디렉터의 편집 순서 및 내용 가이드")
-                        ai_result = ai_organize_videos_with_gemini(valid_clips, api_key_input)
-                        st.markdown(ai_result)
-                    else:
-                        st.warning("⚠️ 통과된 유효한 영상이 없습니다. 블러 기준을 조절해 보세요.")
+                    with st.container(border=True):
+                        st.markdown(f"**파일명: {result['file_name']}**")
+                        st.text(f"영상 길이: {result['duration']:.1f}초 | 선명도 점수: {result['avg_blur_score']:.1f}")
+                        
+                        if result.get("is_blurry"):
+                            st.error("🚨 불량 판정 (흔들림/흐림 심함 - 제외 후보)")
+                        else:
+                            st.success("✅ 통과 (편집 후보)")
+                            valid_clips.append(result)
+                    
+                    os.unlink(tfile.name)
+                
+                # 2단계: Gemini AI 분석 실행 (60% ~ 100% 구간)
+                if valid_clips:
+                    progress_bar.progress(70)
+                    status_text.text("🤖 Gemini AI 디렉터가 최적의 스토리라인을 구성하는 중입니다...")
+                    
+                    st.divider()
+                    st.subheader("🤖 2단계: Gemini 디렉터의 편집 순서 및 내용 가이드")
+                    ai_result = ai_organize_videos_with_gemini(valid_clips, api_key_input)
+                    
+                    progress_bar.progress(100)
+                    status_text.text("✨ 분석이 완료되었습니다!")
+                    time.sleep(0.5)
+                    status_text.empty()
+                    progress_bar.empty()
+                    
+                    st.markdown(ai_result)
+                else:
+                    progress_bar.progress(100)
+                    status_text.empty()
+                    st.warning("⚠️ 통과된 유효한 영상이 없습니다. 블러 기준을 조절해 보세요.")
     else:
         st.info("💡 위 업로드 버튼을 눌러 편집할 영상들을 선택해 주세요.")
